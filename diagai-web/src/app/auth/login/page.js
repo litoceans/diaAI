@@ -13,7 +13,6 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import { motion } from 'framer-motion';
-import { Chrome } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -172,7 +171,14 @@ export default function Login() {
                 size="large"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                startIcon={<Chrome />}
+                startIcon={
+                  <Image 
+                    src="https://cdn1.iconfinder.com/data/icons/google-s-logo/150/Google_Icons-09-512.png"
+                    alt="Google"
+                    width={20}
+                    height={20}
+                  />
+                }
                 sx={{
                   py: 1.5,
                   borderRadius: 2,

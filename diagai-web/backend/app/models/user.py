@@ -2,8 +2,24 @@ from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional, List, Dict
 from datetime import datetime
 from app.core.config import get_settings
+from bson import ObjectId
 
 settings = get_settings()
+
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return ObjectId(v)
+
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -77,6 +93,56 @@ class User(UserBase):
     def monthly_credits(self) -> int:
         """Get monthly credit allowance based on user's plan."""
         return settings.PLANS[self.plan]["credits_per_month"]
+
+class UpgradeRequest(BaseModel):
+    user_id: str
+    plan: str
+    firstName: str
+    lastName: str
+    email: EmailStr
+    company: Optional[str] = None
+    phone: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = "pending"
+
+    class Config:
+        allow_population_by_field_name = True
+        json_encoders = {ObjectId: str}
+        schema_extra = {
+            "example": {
+                "user_id": "507f1f77bcf86cd799439011",
+                "plan": "pro",
+                "firstName": "John",
+                "lastName": "Doe",
+                "email": "john.doe@example.com",
+                "company": "Acme Inc",
+                "phone": "+1234567890"
+            }
+        }
+
+class ContactRequest(BaseModel):
+    firstName: str
+    lastName: str
+    email: EmailStr
+    company: Optional[str] = None
+    phone: Optional[str] = None
+    message: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = "unread"
+
+    class Config:
+        allow_population_by_field_name = True
+        json_encoders = {ObjectId: str}
+        schema_extra = {
+            "example": {
+                "firstName": "John",
+                "lastName": "Doe",
+                "email": "john.doe@example.com",
+                "company": "Acme Inc",
+                "phone": "+1234567890",
+                "message": "I'm interested in the Enterprise plan"
+            }
+        }
 
 class GoogleSignInRequest(BaseModel):
     id_token: str

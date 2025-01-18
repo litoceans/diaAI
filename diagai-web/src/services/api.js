@@ -17,7 +17,7 @@ async function fetchWithAuth(endpoint, options = {}) {
     if (response.status === 401) {
       // Clear token and redirect to login
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      window.location.href = '/auth/login';
       throw new Error('Authentication failed');
     }
     const error = await response.json().catch(() => ({}));

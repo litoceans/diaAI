@@ -1,16 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.api.deps import get_db, get_current_active_user
-from app.models.user import UserUpdate, User
+from app.models.user import UserUpdate, User, UpgradeRequest, ContactRequest
 from datetime import datetime
 from bson import ObjectId
 from app.core.security import verify_google_token, create_access_token
-from fastapi.security import OAuth2PasswordBearer
-from typing import Optional
 from pydantic import BaseModel
+from typing import Optional
+from fastapi.security import OAuth2PasswordBearer
 
 class GoogleAuthRequest(BaseModel):
     token: str
+
+class UpgradeRequest(BaseModel):
+    user_id: str
+    plan: str
+    firstName: str
+    lastName: str
+    email: str
+    company: Optional[str] = None
+    phone: Optional[str] = None
+
+class ContactRequest(BaseModel):
+    firstName: str
+    lastName: str
+    email: str
+    company: Optional[str] = None
+    phone: Optional[str] = None
+    message: str
 
 router = APIRouter()
 
@@ -179,4 +196,55 @@ async def google_auth(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Authentication failed: {str(e)}"
+        )
+
+@router.post("/upgrade", response_model=dict)
+async def upgrade_user(
+    upgrade_request: UpgradeRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    try:
+        # Save upgrade request
+        upgrade_data = upgrade_request.dict(exclude_unset=True)
+        upgrade_data["created_at"] = datetime.utcnow()
+        
+        result = await db.upgrade_requests.insert_one(upgrade_data)
+        
+        # Update user's pending upgrade status
+        await db.users.update_one(
+            {"_id": ObjectId(upgrade_request.user_id)},
+            {"$set": {"pending_upgrade": upgrade_request.plan}}
+        )
+        
+        return {
+            "message": "Upgrade request submitted successfully",
+            "request_id": str(result.inserted_id)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/contact", response_model=dict)
+async def submit_contact(
+    contact_request: ContactRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    try:
+        # Save contact request
+        contact_data = contact_request.dict(exclude_unset=True)
+        contact_data["created_at"] = datetime.utcnow()
+        
+        result = await db.contact_requests.insert_one(contact_data)
+        
+        return {
+            "message": "Contact request submitted successfully",
+            "request_id": str(result.inserted_id)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
         )

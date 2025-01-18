@@ -1,37 +1,79 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import PageLayout from '@/components/PageLayout';
 import {
   Box,
-  Container,
-  Typography,
   Grid,
-  Paper,
+  Card,
+  CardContent,
+  Typography,
+  IconButton,
   Button,
+  Menu,
+  MenuItem,
+  Chip,
+  useTheme,
+  useMediaQuery,
+  Skeleton,
+  TextField,
+  InputAdornment,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  IconButton,
-  CircularProgress,
   Alert,
   Snackbar,
 } from '@mui/material';
-import { motion } from 'framer-motion';
-import { Plus, FolderOpen, ArrowRight, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  MoreVertical,
+  Plus,
+  Search,
+  FolderOpen,
+  Calendar,
+  Users,
+  Edit3,
+  Trash2,
+  Share2,
+  Star,
+  Filter,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
 import { projectApi } from '@/services/projectApi';
 
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3 }
+  },
+  exit: {
+    opacity: 0,
+    y: -20,
+    transition: { duration: 0.2 }
+  }
+};
+
 export default function Projects() {
+  const theme = useTheme();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [projectName, setProjectName] = useState('');
-  const [projectDescription, setProjectDescription] = useState('');
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [filterType, setFilterType] = useState('all');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [newProject, setNewProject] = useState({ title: '', description: '' });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchProjects();
@@ -50,47 +92,28 @@ export default function Projects() {
   };
 
   const handleCreateProject = async () => {
-    if (projectName.trim()) {
-      try {
-        setLoading(true);
-        const newProject = await projectApi.createProject({
-          name: projectName,
-          description: projectDescription,
-        });
-        setProjects([...projects, newProject]);
-        setProjectName('');
-        setProjectDescription('');
-        setOpen(false);
-        showSnackbar('Project created successfully', 'success');
-      } catch (error) {
-        showSnackbar(error.message, 'error');
-      } finally {
-        setLoading(false);
-      }
+    if (!newProject.title.trim()) return;
+    
+    setCreating(true);
+    try {
+      const createdProject = await projectApi.createProject({
+        name: newProject.title,
+        description: newProject.description,
+      });
+      
+      setProjects([createdProject, ...projects]);
+      setModalOpen(false);
+      setNewProject({ title: '', description: '' });
+      showSnackbar('Project created successfully!', 'success');
+    } catch (error) {
+      console.error('Error creating project:', error);
+      showSnackbar('Failed to create project', 'error');
+    } finally {
+      setCreating(false);
     }
   };
 
-  const handleDeleteProject = async (projectId, event) => {
-    event.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      try {
-        setLoading(true);
-        await projectApi.deleteProject(projectId);
-        setProjects(projects.filter(project => project._id !== projectId));
-        showSnackbar('Project deleted successfully', 'success');
-      } catch (error) {
-        showSnackbar(error.message, 'error');
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleProjectClick = (projectId) => {
-    router.push(`/projects/${projectId}/diagrams`);
-  };
-
-  const showSnackbar = (message, severity = 'success') => {
+  const showSnackbar = (message, severity) => {
     setSnackbar({ open: true, message, severity });
   };
 
@@ -98,145 +121,314 @@ export default function Projects() {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  if (loading && projects.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const handleMenuOpen = (event, project) => {
+    setAnchorEl(event.currentTarget);
+    setSelectedProject(project);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedProject(null);
+  };
+
+  const handleDelete = async () => {
+    if (!selectedProject) return;
+    try {
+      await projectApi.deleteProject(selectedProject._id);
+      setProjects(projects.filter(p => p._id !== selectedProject._id));
+      showSnackbar('Project deleted successfully!', 'success');
+    } catch (error) {
+      console.error('Error deleting project:', error);
+    }
+    handleMenuClose();
+  };
+
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase());
+    if (filterType === 'all') return matchesSearch;
+    if (filterType === 'starred') return project.starred && matchesSearch;
+    if (filterType === 'shared') return project.shared && matchesSearch;
+    return matchesSearch;
+  });
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'active': return theme.palette.success.main;
+      case 'completed': return theme.palette.info.main;
+      case 'archived': return theme.palette.grey[500];
+      default: return theme.palette.primary.main;
+    }
+  };
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 4,
-          }}
-        >
-          <Typography variant="h4">My Projects</Typography>
-          <Button
-            variant="contained"
-            startIcon={<Plus />}
-            onClick={() => setOpen(true)}
+    <PageLayout>
+      <Box sx={{ mb: { xs: 3, sm: 4, md: 5 } }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' }, 
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          gap: 2,
+          mb: 3
+        }}>
+          <Typography 
+            variant="h4" 
+            component={motion.h1}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            sx={{ 
+              fontSize: {
+                xs: '1.5rem',
+                sm: '2rem',
+                md: '2.5rem'
+              }
+            }}
           >
-            New Project
-          </Button>
+            Projects
+          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            gap: 2,
+            flexDirection: { xs: 'column', sm: 'row' },
+            width: { xs: '100%', sm: 'auto' }
+          }}>
+            <TextField
+              placeholder="Search projects..."
+              size="small"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              sx={{ 
+                minWidth: { xs: '100%', sm: '200px' },
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2
+                }
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search size={20} />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Button
+              variant="contained"
+              startIcon={<Plus size={20} />}
+              onClick={() => setModalOpen(true)}
+              sx={{ 
+                borderRadius: 2,
+                whiteSpace: 'nowrap',
+                width: { xs: '100%', sm: 'auto' }
+              }}
+            >
+              New Project
+            </Button>
+          </Box>
         </Box>
 
-        <Grid container spacing={3}>
-          {projects.length === 0 ? (
-            <Grid item xs={12}>
-              <Paper
-                component={motion.div}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                sx={{
-                  p: 6,
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-              >
-                <FolderOpen size={48} color="#9CA3AF" />
-                <Typography variant="h6" color="text.secondary">
-                  No projects yet
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Create your first project to start generating diagrams
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<Plus />}
-                  onClick={() => setOpen(true)}
-                  sx={{ mt: 2 }}
-                >
-                  Create Project
-                </Button>
-              </Paper>
-            </Grid>
-          ) : (
-            projects.map((project) => (
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 1, 
+          mb: 3,
+          overflowX: 'auto',
+          pb: 1
+        }}>
+          {['all', 'starred', 'shared'].map((type) => (
+            <Chip
+              key={type}
+              label={type.charAt(0).toUpperCase() + type.slice(1)}
+              onClick={() => setFilterType(type)}
+              color={filterType === type ? 'primary' : 'default'}
+              icon={type === 'starred' ? <Star size={16} /> : 
+                    type === 'shared' ? <Share2 size={16} /> :
+                    <Filter size={16} />}
+              sx={{ 
+                borderRadius: 2,
+                '&:hover': {
+                  backgroundColor: filterType === type ? 
+                    theme.palette.primary.main : 
+                    theme.palette.action.hover
+                }
+              }}
+            />
+          ))}
+        </Box>
+
+        <AnimatePresence>
+          <Grid container spacing={2}>
+            {loading ? (
+              Array.from(new Array(6)).map((_, index) => (
+                <Grid item xs={12} sm={6} md={4} key={index}>
+                  <Card sx={{ borderRadius: 2 }}>
+                    <CardContent>
+                      <Skeleton variant="text" width="60%" height={32} />
+                      <Skeleton variant="text" width="40%" height={24} />
+                      <Skeleton variant="rectangular" height={60} sx={{ mt: 2, borderRadius: 1 }} />
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))
+            ) : filteredProjects.map((project) => (
               <Grid item xs={12} sm={6} md={4} key={project._id}>
-                <Paper
+                <Card
                   component={motion.div}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  sx={{
-                    p: 3,
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  layout
+                  sx={{ 
+                    borderRadius: 2,
                     cursor: 'pointer',
                     '&:hover': {
-                      boxShadow: 6,
-                    },
+                      boxShadow: theme.shadows[4],
+                      transform: 'translateY(-4px)',
+                      transition: 'all 0.3s ease'
+                    }
                   }}
-                  onClick={() => handleProjectClick(project._id)}
+                  onClick={() => router.push(`/projects/${project._id}/diagrams`)}
                 >
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Typography variant="h6" noWrap sx={{ flex: 1 }}>
-                      {project.name}
-                    </Typography>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => handleDeleteProject(project._id, e)}
-                      sx={{ ml: 1 }}
-                    >
-                      <Trash2 size={18} />
-                    </IconButton>
-                  </Box>
-                  {project.description && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {project.description}
-                    </Typography>
-                  )}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(project.created_at).toLocaleDateString()}
-                    </Typography>
-                    <ArrowRight size={20} />
-                  </Box>
-                </Paper>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Box>
+                        <Typography variant="h6" gutterBottom>
+                          {project.name}
+                        </Typography>
+                        <Chip 
+                          label={project.status || 'Active'} 
+                          size="small"
+                          sx={{ 
+                            backgroundColor: getStatusColor(project.status) + '20',
+                            color: getStatusColor(project.status),
+                            borderRadius: 1
+                          }} 
+                        />
+                      </Box>
+                      <IconButton 
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMenuOpen(e, project);
+                        }}
+                      >
+                        <MoreVertical size={20} />
+                      </IconButton>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <FolderOpen size={16} color={theme.palette.text.secondary} />
+                        <Typography variant="body2" color="text.secondary">
+                          {project.diagrams?.length || 0} diagrams
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Calendar size={16} color={theme.palette.text.secondary} />
+                        <Typography variant="body2" color="text.secondary">
+                          {format(new Date(project.created_at), 'MMM d, yyyy')}
+                        </Typography>
+                      </Box>
+                      {project.shared && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Users size={16} color={theme.palette.text.secondary} />
+                          <Typography variant="body2" color="text.secondary">
+                            Shared with team
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </CardContent>
+                </Card>
               </Grid>
-            ))
-          )}
-        </Grid>
+            ))}
+          </Grid>
+        </AnimatePresence>
       </Box>
 
-      {/* Create Project Dialog */}
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Create New Project</DialogTitle>
-        <DialogContent>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem onClick={handleMenuClose}>
+          <Edit3 size={16} style={{ marginRight: 8 }} />
+          Edit
+        </MenuItem>
+        <MenuItem onClick={handleMenuClose}>
+          <Share2 size={16} style={{ marginRight: 8 }} />
+          Share
+        </MenuItem>
+        <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
+          <Trash2 size={16} style={{ marginRight: 8 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      {/* New Project Modal */}
+      <Dialog 
+        open={modalOpen} 
+        onClose={() => !creating && setModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            p: 1
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          pb: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          <Plus size={24} />
+          Create New Project
+        </DialogTitle>
+        <DialogContent sx={{ pb: 1 }}>
           <TextField
             autoFocus
-            margin="dense"
             label="Project Name"
             fullWidth
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            sx={{ mb: 2 }}
+            value={newProject.title}
+            onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+            sx={{ mb: 3, mt: 1 }}
+            placeholder="Enter project name"
+            InputProps={{
+              sx: { borderRadius: 1 }
+            }}
           />
           <TextField
-            margin="dense"
-            label="Description (Optional)"
+            label="Description"
             fullWidth
             multiline
-            rows={3}
-            value={projectDescription}
-            onChange={(e) => setProjectDescription(e.target.value)}
+            rows={4}
+            value={newProject.description}
+            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+            placeholder="Enter project description (optional)"
+            InputProps={{
+              sx: { borderRadius: 1 }
+            }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleCreateProject}
-            variant="contained"
-            disabled={!projectName.trim()}
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={() => setModalOpen(false)}
+            disabled={creating}
+            sx={{ borderRadius: 2 }}
           >
-            Create
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateProject}
+            disabled={!newProject.title.trim() || creating}
+            sx={{ borderRadius: 2 }}
+          >
+            {creating ? 'Creating...' : 'Create Project'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -244,14 +436,23 @@ export default function Projects() {
       {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={6000}
+        autoHideDuration={5000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ 
+            borderRadius: 2,
+            alignItems: 'center'
+          }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Container>
+
+    </PageLayout>
   );
 }

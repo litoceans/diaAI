@@ -1,18 +1,28 @@
 'use client';
 
-import ProtectedRoute from '@/components/ProtectedRoute';
-import Sidebar from '@/components/Sidebar';
 import { Box } from '@mui/material';
+import Sidebar from '@/components/Sidebar';
 
 export default function ProjectsLayout({ children }) {
   return (
-    <ProtectedRoute>
-      <Box sx={{ display: 'flex' }}>
-        <Sidebar />
-        <Box component="main" sx={{ flexGrow: 1, p: 3, pt: 2 }}>
-          {children}
-        </Box>
+    <Box 
+      sx={{ 
+        display: 'flex',
+        minHeight: '100vh',
+        overflow: 'hidden'
+      }}
+    >
+      <Sidebar />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          overflow: 'auto',
+          height: '100vh'
+        }}
+      >
+        {children}
       </Box>
-    </ProtectedRoute>
+    </Box>
   );
 }
