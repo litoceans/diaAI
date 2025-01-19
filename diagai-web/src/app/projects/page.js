@@ -24,6 +24,8 @@ import {
   DialogActions,
   Alert,
   Snackbar,
+  Paper,
+  Container
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,6 +40,7 @@ import {
   Share2,
   Star,
   Filter,
+  FolderPlus,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -55,6 +58,146 @@ const cardVariants = {
     y: -20,
     transition: { duration: 0.2 }
   }
+};
+
+const EmptyState = ({ onCreateProject }) => {
+  const theme = useTheme();
+  
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+  };
+  
+  return (
+    <Box
+      component={motion.div}
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        py: 8,
+        textAlign: 'center'
+      }}
+    >
+      <motion.div variants={itemVariants}>
+        <Box
+          sx={{
+            width: 240,
+            height: 240,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            mb: 4,
+            color: 'primary.main',
+            bgcolor: theme.palette.mode === 'dark' 
+              ? 'rgba(25, 118, 210, 0.08)' 
+              : 'rgba(25, 118, 210, 0.04)',
+            borderRadius: '50%',
+            position: 'relative',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: -4,
+              left: -4,
+              right: -4,
+              bottom: -4,
+              borderRadius: '50%',
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              opacity: 0.2,
+            },
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              top: -2,
+              left: -2,
+              right: -2,
+              bottom: -2,
+              borderRadius: '50%',
+              background: theme.palette.background.paper,
+              zIndex: 0,
+            }
+          }}
+        >
+          <Box sx={{ position: 'relative', zIndex: 1 }}>
+            <FolderPlus 
+              size={100}
+              style={{
+                strokeWidth: 1.5,
+                opacity: 0.9
+              }}
+            />
+          </Box>
+        </Box>
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <Typography 
+          variant="h4" 
+          gutterBottom
+          sx={{ 
+            fontWeight: 600,
+            background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 2
+          }}
+        >
+          No Projects Yet
+        </Typography>
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <Typography 
+          variant="body1" 
+          color="text.secondary" 
+          sx={{ 
+            mb: 4, 
+            maxWidth: 450,
+            lineHeight: 1.6
+          }}
+        >
+          Start your journey by creating your first project. 
+          Our AI will help you transform your ideas into beautiful diagrams in seconds.
+        </Typography>
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <Button
+          variant="contained"
+          size="large"
+          startIcon={<Plus />}
+          onClick={onCreateProject}
+          sx={{
+            px: 4,
+            py: 1.5,
+            borderRadius: 2,
+            background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            boxShadow: `0 8px 16px -4px ${theme.palette.primary.main}40`,
+            '&:hover': {
+              background: `linear-gradient(45deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+              boxShadow: `0 12px 20px -4px ${theme.palette.primary.main}60`,
+            }
+          }}
+        >
+          Create Your First Project
+        </Button>
+      </motion.div>
+    </Box>
+  );
 };
 
 export default function Projects() {
@@ -160,6 +303,18 @@ export default function Projects() {
     }
   };
 
+  if (projects.length === 0) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper sx={{ p: 4 }}>
+          <EmptyState
+            onCreateProject={() => setModalOpen(true)}
+          />
+        </Paper>
+      </Container>
+    );
+  }
+
   return (
     <PageLayout>
       <Box sx={{ mb: { xs: 3, sm: 4, md: 5 } }}>
@@ -211,18 +366,23 @@ export default function Projects() {
                 ),
               }}
             />
-            <Button
-              variant="contained"
-              startIcon={<Plus size={20} />}
-              onClick={() => setModalOpen(true)}
-              sx={{ 
-                borderRadius: 2,
-                whiteSpace: 'nowrap',
-                width: { xs: '100%', sm: 'auto' }
-              }}
-            >
-              New Project
-            </Button>
+            {
+              projects?.length > 0 && (
+                <Button
+                variant="contained"
+                startIcon={<Plus size={20} />}
+                onClick={() => setModalOpen(true)}
+                sx={{ 
+                  borderRadius: 2,
+                  whiteSpace: 'nowrap',
+                  width: { xs: '100%', sm: 'auto' }
+                }}
+              >
+                New Project
+              </Button>
+              )
+            }
+
           </Box>
         </Box>
 
@@ -233,7 +393,8 @@ export default function Projects() {
           overflowX: 'auto',
           pb: 1
         }}>
-          {['all', 'starred', 'shared'].map((type) => (
+          {/* {['all', 'starred', 'shared'].map((type) => ( */}
+              {['all'].map((type) => (
             <Chip
               key={type}
               label={type.charAt(0).toUpperCase() + type.slice(1)}
@@ -268,6 +429,12 @@ export default function Projects() {
                   </Card>
                 </Grid>
               ))
+            ) : filteredProjects.length === 0 ? (
+              <Grid item xs={12}>
+                <Paper sx={{ p: 4 }}>
+                  <EmptyState onCreateProject={() => setModalOpen(true)} />
+                </Paper>
+              </Grid>
             ) : filteredProjects.map((project) => (
               <Grid item xs={12} sm={6} md={4} key={project._id}>
                 <Card
@@ -352,14 +519,14 @@ export default function Projects() {
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        <MenuItem onClick={handleMenuClose}>
+        {/* <MenuItem onClick={handleMenuClose}>
           <Edit3 size={16} style={{ marginRight: 8 }} />
           Edit
         </MenuItem>
         <MenuItem onClick={handleMenuClose}>
           <Share2 size={16} style={{ marginRight: 8 }} />
           Share
-        </MenuItem>
+        </MenuItem> */}
         <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}>
           <Trash2 size={16} style={{ marginRight: 8 }} />
           Delete

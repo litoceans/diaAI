@@ -89,6 +89,9 @@ async def get_dashboard_stats(
     
     # Calculate credits usage
     total_credits = current_user.get("credits", 0)
+    getTotalCredits = current_user.get("total_credits", 0)
+    avlCredits = current_user.get("credits", 0)
+    getTotalProjects = await db.projects.count_documents({"user_id": str(current_user["_id"])})
     credits_used = await db.diagrams.count_documents({
         "user_id": str(current_user["_id"]),
         "status": "completed"
@@ -98,7 +101,10 @@ async def get_dashboard_stats(
         "stats": {
             "creditsUsed": credits_used,
             "totalCredits": total_credits,
+            "fullCredits": getTotalCredits,
             "totalDiagrams": total_diagrams,
+            "totalProjects": getTotalProjects,
+            "avlCredits": avlCredits
         },
         "user": {
             "plan": current_user.get("plan", "free"),
@@ -248,3 +254,65 @@ async def submit_contact(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+@router.get("/credits/usage", response_model=dict)
+async def get_credits_usage(
+    current_user: dict = Depends(get_current_active_user),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get daily and monthly credits usage statistics"""
+    from datetime import datetime, timedelta
+    import calendar
+
+    # Get current date and first day of current month
+    today = datetime.utcnow()
+    start_of_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get last 7 days for daily stats
+    daily_stats = []
+    for i in range(7):
+        date = today - timedelta(days=i)
+        start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+        
+        count = await db.diagrams.count_documents({
+            "user_id": str(current_user["_id"]),
+            "created_at": {
+                "$gte": start_of_day,
+                "$lt": end_of_day
+            },
+            "status": "completed"
+        })
+        
+        daily_stats.append({
+            "date": start_of_day.strftime("%Y-%m-%d"),
+            "count": count
+        })
+    
+    # Get last 6 months for monthly stats
+    monthly_stats = []
+    for i in range(6):
+        date = start_of_month - timedelta(days=30*i)
+        end_of_month = date.replace(
+            day=calendar.monthrange(date.year, date.month)[1],
+            hour=23, minute=59, second=59
+        )
+        
+        count = await db.diagrams.count_documents({
+            "user_id": str(current_user["_id"]),
+            "created_at": {
+                "$gte": date,
+                "$lt": end_of_month
+            },
+            "status": "completed"
+        })
+        
+        monthly_stats.append({
+            "month": date.strftime("%Y-%m"),
+            "count": count
+        })
+    
+    return {
+        "daily": list(reversed(daily_stats)),
+        "monthly": list(reversed(monthly_stats))
+    }

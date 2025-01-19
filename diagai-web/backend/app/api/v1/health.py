@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from app.api.deps import get_db, get_admin_user
+from app.api.deps import get_db, get_current_admin_user
 from app.core.config import get_settings
 import psutil
 import os
@@ -106,33 +106,28 @@ async def storage_health():
 @router.get("/full", response_model=dict)
 async def full_health_check(
     db: AsyncIOMotorDatabase = Depends(get_db),
-    admin_user_id: str = Depends(get_admin_user)
+    admin_user: dict = Depends(get_current_admin_user)
 ):
     """Comprehensive health check (admin only)"""
     try:
-        # Get all health metrics
+        # Basic health check
+        health = await health_check()
+        
+        # System health
         system = await system_health()
+        
+        # Database health
         database = await database_health(db)
+        
+        # Storage health
         storage = await storage_health()
         
-        # Additional checks
-        active_users = await db.users.count_documents({"account_status": "active"})
-        total_projects = await db.projects.count_documents({})
-        total_diagrams = await db.diagrams.count_documents({})
-        
         return {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
+            **health,
             "system": system["system"],
             "database": database["database"],
             "storage": storage["storage"],
-            "application": {
-                "active_users": active_users,
-                "total_projects": total_projects,
-                "total_diagrams": total_diagrams,
-                "version": "1.0.0",
-                "environment": os.getenv("ENV", "development")
-            }
+            "checked_by": admin_user["email"]
         }
     except Exception as e:
         raise HTTPException(

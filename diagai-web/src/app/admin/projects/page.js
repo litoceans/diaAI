@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -24,6 +24,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { motion } from 'framer-motion';
 import {
@@ -36,31 +38,47 @@ import {
   Image,
   Film,
 } from 'lucide-react';
-
-// Sample data
-const sampleProjects = [
-  {
-    id: 1,
-    name: 'Marketing Flowchart',
-    user: 'John Doe',
-    email: 'john@example.com',
-    totalDiagrams: 15,
-    images: 10,
-    gifs: 5,
-    lastModified: '2023-12-22T14:30:00',
-    status: 'active',
-  },
-  // Add more sample projects
-];
+import { adminApi } from '@/services/adminApi';
+import { useRouter } from 'next/navigation';
 
 export default function AdminProjects() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [projects, setProjects] = useState([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
+  const [totalProjects, setTotalProjects] = useState(0);
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
+
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await adminApi.getProjects({
+        page: page + 1,
+        limit: rowsPerPage,
+        search: searchTerm,
+        sort_by: 'created_at',
+        sort_order: 'desc'
+      });
+      setProjects(response.projects);
+      setTotalProjects(response.total);
+    } catch (err) {
+      setError('Failed to fetch projects');
+      console.error('Error fetching projects:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, [page, rowsPerPage, searchTerm]);
 
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -86,9 +104,20 @@ export default function AdminProjects() {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
-    // Implement delete logic here
-    setDeleteDialogOpen(false);
+  const handleDeleteConfirm = async () => {
+    try {
+      await adminApi.deleteProject(selectedProject.id);
+      setDeleteDialogOpen(false);
+      fetchProjects();
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      setError('Failed to delete project');
+    }
+  };
+
+  const handleViewProject = (projectId) => {
+    handleMenuClose();
+    router.push(`/admin/projects/${projectId}`);
   };
 
   const containerVariants = {
@@ -106,6 +135,14 @@ export default function AdminProjects() {
     visible: { opacity: 1, y: 0 },
   };
 
+  if (loading && projects.length === 0) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
+        <CircularProgress />
+      </Container>
+    );
+  }
+
   return (
     <Container maxWidth="lg">
       <Box
@@ -115,6 +152,12 @@ export default function AdminProjects() {
         animate="visible"
         sx={{ py: 4 }}
       >
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
         {/* Header */}
         <Box
           sx={{
@@ -177,128 +220,109 @@ export default function AdminProjects() {
                   <TableCell>Project Name</TableCell>
                   <TableCell>User</TableCell>
                   <TableCell align="center">Total Diagrams</TableCell>
-                  <TableCell align="center">Images</TableCell>
-                  <TableCell align="center">GIFs</TableCell>
-                  <TableCell>Last Modified</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Created At</TableCell>
+                  <TableCell>Updated At</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {sampleProjects
-                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                  .map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell>{project.name}</TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2">{project.user}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {project.email}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell align="center">{project.totalDiagrams}</TableCell>
-                      <TableCell align="center">
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Image size={16} style={{ marginRight: 4 }} />
-                          {project.images}
-                        </Box>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Film size={16} style={{ marginRight: 4 }} />
-                          {project.gifs}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(project.lastModified).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={project.status}
-                          color={project.status === 'active' ? 'success' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleMenuOpen(e, project)}
-                        >
-                          <MoreVertical size={20} />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                {projects.map((project) => (
+                  <TableRow key={project.id}>
+                    <TableCell>
+                      <Typography variant="body2">{project.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {project.description}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2">{project.user.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {project.user.email}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">{project.diagrams_count}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={project.status}
+                        color={project.status === 'active' ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {new Date(project.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(project.updated_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleMenuOpen(e, project)}
+                      >
+                        <MoreVertical size={20} />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
           <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
             component="div"
-            count={sampleProjects.length}
+            count={totalProjects}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
           />
         </Paper>
-
-        {/* Actions Menu */}
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          <MenuItem onClick={handleMenuClose}>
-            <Eye size={16} style={{ marginRight: 8 }} />
-            View Details
-          </MenuItem>
-          <MenuItem onClick={handleMenuClose}>
-            <Download size={16} style={{ marginRight: 8 }} />
-            Download
-          </MenuItem>
-          <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
-            <Trash2 size={16} style={{ marginRight: 8 }} />
-            Delete
-          </MenuItem>
-        </Menu>
-
-        {/* Filter Menu */}
-        <Menu
-          anchorEl={filterAnchorEl}
-          open={Boolean(filterAnchorEl)}
-          onClose={() => setFilterAnchorEl(null)}
-        >
-          <MenuItem onClick={() => setFilterAnchorEl(null)}>All Projects</MenuItem>
-          <MenuItem onClick={() => setFilterAnchorEl(null)}>Active Projects</MenuItem>
-          <MenuItem onClick={() => setFilterAnchorEl(null)}>Archived Projects</MenuItem>
-        </Menu>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteDialogOpen}
-          onClose={() => setDeleteDialogOpen(false)}
-        >
-          <DialogTitle>Delete Project</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to delete this project? This action cannot be
-              undone.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleDeleteConfirm}
-              color="error"
-              variant="contained"
-            >
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Box>
+
+      {/* Action Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={() => handleViewProject(selectedProject?.id)}>
+          <Eye size={20} style={{ marginRight: 8 }} />
+          View Details
+        </MenuItem>
+        <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
+          <Trash2 size={20} style={{ marginRight: 8 }} />
+          Delete Project
+        </MenuItem>
+      </Menu>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete Project</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this project? This action cannot be
+            undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

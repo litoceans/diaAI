@@ -2,19 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { useAdminAuth } from '@/context/AdminAuthContext';
 import {
   Box,
-  Drawer,
   AppBar,
   Toolbar,
-  List,
-  Typography,
-  Divider,
   IconButton,
+  Typography,
+  Drawer,
+  List,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Divider,
   Avatar,
   Menu,
   MenuItem,
@@ -26,87 +27,66 @@ import {
   LayoutDashboard,
   Users,
   Settings,
-  FolderKanban,
-  LogOut,
   User,
+  LogOut,
+  Folder,
+  FolderKanban,
 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
 
 const drawerWidth = 280;
 
 export default function AdminLayout({ children }) {
   const [open, setOpen] = useState(true);
-  const [loading, setLoading] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { admin, isLoading, logout } = useAdminAuth();
 
   useEffect(() => {
-    // Check authentication
-    if (!user) {
+    if (!isLoading && !admin && pathname !== '/admin/login') {
       router.push('/admin/login');
-    } else {
-      setLoading(false);
     }
-  }, [user, router]);
+  }, [admin, isLoading, router, pathname]);
 
-  const handleDrawerOpen = () => {
-    setOpen(true);
-  };
-
-  const handleDrawerClose = () => {
-    setOpen(false);
-  };
-
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/admin/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
+  const handleDrawerOpen = () => setOpen(true);
+  const handleDrawerClose = () => setOpen(false);
+  const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleMenuClose = () => setAnchorEl(null);
+  const handleLogout = () => logout();
 
   const menuItems = [
     {
       text: 'Dashboard',
-      icon: <LayoutDashboard size={22} />,
+      icon: <LayoutDashboard size={20} />,
       path: '/admin/dashboard',
     },
     {
-      text: 'Projects',
-      icon: <FolderKanban size={22} />,
-      path: '/admin/projects',
-    },
-    {
       text: 'Users',
-      icon: <Users size={22} />,
+      icon: <Users size={20} />,
       path: '/admin/users',
     },
     {
+      text: 'Projects',
+      icon: <FolderKanban size={20} />,
+      path: '/admin/projects',
+    },
+    {
       text: 'Settings',
-      icon: <Settings size={22} />,
+      icon: <Settings size={20} />,
       path: '/admin/settings',
     },
   ];
 
-  if (loading) {
+  // Show loading spinner during initial load
+  if (isLoading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
+      <Box 
+        sx={{ 
+          minHeight: '100vh', 
+          display: 'flex', 
+          alignItems: 'center', 
           justifyContent: 'center',
-          minHeight: '100vh',
+          bgcolor: 'background.default'
         }}
       >
         <CircularProgress />
@@ -114,10 +94,17 @@ export default function AdminLayout({ children }) {
     );
   }
 
-  if (!user) {
+  // Show login page when not authenticated
+  if (!admin && pathname === '/admin/login') {
     return children;
   }
 
+  // Don't show anything if not authenticated and not on login page
+  if (!admin) {
+    return null;
+  }
+
+  // Show admin layout when authenticated
   return (
     <Box sx={{ display: 'flex' }}>
       <AppBar
@@ -167,7 +154,7 @@ export default function AdminLayout({ children }) {
                 height: 35,
               }}
             >
-              {user?.email?.charAt(0).toUpperCase()}
+              {admin?.email?.charAt(0).toUpperCase()}
             </Avatar>
           </IconButton>
           <Menu

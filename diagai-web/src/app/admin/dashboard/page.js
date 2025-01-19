@@ -1,83 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
   Typography,
   Grid,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
-  IconButton,
   Card,
   CardContent,
   useTheme,
+  LinearProgress,
+  Alert,
 } from '@mui/material';
-import { motion } from 'framer-motion';
 import {
   Users,
-  Image,
-  Film,
+  Image as ImageIcon,
+  FileText,
+  CreditCard,
   TrendingUp,
-  MoreVertical,
-  Download,
   ChevronUp,
+  ChevronDown,
+  UserCheck,
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
-
-// Sample data for charts
-const userActivityData = [
-  { name: 'Mon', users: 120, images: 450, gifs: 200 },
-  { name: 'Tue', users: 150, images: 480, gifs: 220 },
-  { name: 'Wed', users: 180, images: 520, gifs: 240 },
-  { name: 'Thu', users: 170, images: 490, gifs: 210 },
-  { name: 'Fri', users: 160, images: 500, gifs: 230 },
-  { name: 'Sat', users: 190, images: 550, gifs: 260 },
-  { name: 'Sun', users: 200, images: 600, gifs: 280 },
-];
-
-const recentUsers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'john@example.com',
-    plan: 'Pro',
-    status: 'Active',
-    lastActive: '2 hours ago',
-  },
-  {
-    id: 2,
-    name: 'Jane Smith',
-    email: 'jane@example.com',
-    plan: 'Basic',
-    status: 'Active',
-    lastActive: '5 hours ago',
-  },
-  {
-    id: 3,
-    name: 'Mike Johnson',
-    email: 'mike@example.com',
-    plan: 'Pro',
-    status: 'Inactive',
-    lastActive: '1 day ago',
-  },
-];
+import { adminApi } from '@/services/adminApi';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -112,7 +70,7 @@ const CustomTooltip = ({ active, payload, label }) => {
               }}
             />
             <Typography variant="body2">
-              {entry.name}: {entry.value}
+              {`${entry.name}: ${entry.value.toLocaleString()}`}
             </Typography>
           </Box>
         ))}
@@ -124,36 +82,100 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function AdminDashboard() {
   const theme = useTheme();
-  const [stats] = useState({
-    totalUsers: 1234,
-    totalImages: 5678,
-    totalGifs: 910,
-    activeUsers: 456,
-  });
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const data = await adminApi.getStats();
+      setStats(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    // Refresh stats every 30 seconds
+    const intervalId = setInterval(fetchStats, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ width: '100%', mt: 2 }}>
+        <LinearProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ mt: 2, p: 2 }}>
+        <Alert severity="error">Error: {error}</Alert>
+      </Box>
+    );
+  }
+
+  const statCards = [
+    {
+      title: 'Total Users',
+      value: stats?.users?.total || 0,
+      icon: Users,
+      color: 'primary.main',
+      growth: stats?.users?.new || 0,
+      growthLabel: 'new in 30 days'
     },
+    {
+      title: 'Active Users',
+      value: stats?.users?.active || 0,
+      icon: UserCheck,
+      color: 'success.main',
+      growth: ((stats?.users?.active || 0) / (stats?.users?.total || 1) * 100).toFixed(1),
+      growthLabel: '% of total users'
+    },
+    {
+      title: 'Total Diagrams',
+      value: stats?.diagrams?.total || 0,
+      icon: ImageIcon,
+      color: 'warning.main',
+      growth: stats?.diagrams?.new || 0,
+      growthLabel: 'new in 30 days'
+    },
+    {
+      title: 'Total Credits',
+      value: stats?.credits?.total || 0,
+      icon: CreditCard,
+      color: 'info.main',
+      growth: 0,
+      growthLabel: 'credits used'
+    }
+  ];
+
+  const DIAGRAM_STATUS_COLORS = {
+    completed: theme.palette.success.main,
+    pending: theme.palette.warning.main,
+    failed: theme.palette.error.main,
+    draft: theme.palette.grey[500],
   };
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
-  };
+  const diagramStatusData = Object.entries(stats?.diagrams?.by_status || {}).map(([status, count]) => ({
+    name: status.charAt(0).toUpperCase() + status.slice(1),
+    value: count,
+    color: DIAGRAM_STATUS_COLORS[status] || theme.palette.grey[500]
+  }));
 
-  const StatCard = ({ icon: Icon, title, value, growth }) => (
+  const StatCard = ({ icon: Icon, title, value, color, growth, growthLabel }) => (
     <Card
-      component={motion.div}
-      variants={itemVariants}
       sx={{
         height: '100%',
         borderRadius: 2,
-        background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
         transition: 'transform 0.2s',
         '&:hover': {
           transform: 'translateY(-4px)',
@@ -166,8 +188,8 @@ export default function AdminDashboard() {
             sx={{
               p: 1,
               borderRadius: 2,
-              bgcolor: 'primary.lighter',
-              color: 'primary.main',
+              bgcolor: `${color}15`,
+              color: color,
               display: 'flex',
             }}
           >
@@ -181,15 +203,22 @@ export default function AdminDashboard() {
           {value.toLocaleString()}
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <ChevronUp size={20} color={theme.palette.success.main} />
+          {growth > 0 ? (
+            <ChevronUp size={20} color={theme.palette.success.main} />
+          ) : growth < 0 ? (
+            <ChevronDown size={20} color={theme.palette.error.main} />
+          ) : null}
           <Typography
             variant="body2"
-            sx={{ color: 'success.main', fontWeight: 600 }}
+            sx={{
+              color: growth > 0 ? 'success.main' : growth < 0 ? 'error.main' : 'text.secondary',
+              fontWeight: 600
+            }}
           >
-            {growth}
+            {growth.toLocaleString()}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            from last month
+            {growthLabel}
           </Typography>
         </Box>
       </CardContent>
@@ -197,295 +226,82 @@ export default function AdminDashboard() {
   );
 
   return (
-    <Container maxWidth="lg">
-      <Box
-        component={motion.div}
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        sx={{ py: 4 }}
-      >
-        <Typography variant="h4" sx={{ mb: 4, fontWeight: 700 }}>
-          Admin Dashboard
-        </Typography>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" sx={{ mb: 4 }}>
+        Dashboard Overview
+      </Typography>
 
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              icon={Users}
-              title="Total Users"
-              value={stats.totalUsers}
-              growth="+12%"
-            />
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        {statCards.map((card, index) => (
+          <Grid item xs={12} sm={6} md={3} key={index}>
+            <StatCard {...card} />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              icon={Image}
-              title="Total Images"
-              value={stats.totalImages}
-              growth="+8%"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              icon={Film}
-              title="Total GIFs"
-              value={stats.totalGifs}
-              growth="+15%"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <StatCard
-              icon={TrendingUp}
-              title="Active Users"
-              value={stats.activeUsers}
-              growth="+5%"
-            />
-          </Grid>
-        </Grid>
+        ))}
+      </Grid>
 
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} lg={8}>
-            <Paper
-              component={motion.div}
-              variants={itemVariants}
-              sx={{
-                p: 3,
-                height: '400px',
-                borderRadius: 2,
-                boxShadow: 2,
-              }}
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  mb: 3,
-                }}
-              >
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  User Activity
-                </Typography>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<Download size={18} />}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                  }}
-                >
-                  Export
-                </Button>
-              </Box>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={userActivityData}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke={theme.palette.divider}
-                  />
-                  <XAxis
-                    dataKey="name"
-                    stroke={theme.palette.text.secondary}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis
-                    stroke={theme.palette.text.secondary}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar
-                    dataKey="users"
-                    fill={theme.palette.primary.main}
-                    radius={[4, 4, 0, 0]}
-                    name="Users"
-                  />
-                  <Bar
-                    dataKey="images"
-                    fill={theme.palette.success.main}
-                    radius={[4, 4, 0, 0]}
-                    name="Images"
-                  />
-                  <Bar
-                    dataKey="gifs"
-                    fill={theme.palette.warning.main}
-                    radius={[4, 4, 0, 0]}
-                    name="GIFs"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </Paper>
-          </Grid>
-
-          <Grid item xs={12} lg={4}>
-            <Paper
-              component={motion.div}
-              variants={itemVariants}
-              sx={{
-                p: 3,
-                height: '400px',
-                borderRadius: 2,
-                boxShadow: 2,
-              }}
-            >
-              <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-                Generation Trends
-              </Typography>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={userActivityData}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke={theme.palette.divider}
-                  />
-                  <XAxis
-                    dataKey="name"
-                    stroke={theme.palette.text.secondary}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis
-                    stroke={theme.palette.text.secondary}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="images"
-                    stroke={theme.palette.success.main}
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    name="Images"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="gifs"
-                    stroke={theme.palette.warning.main}
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    name="GIFs"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </Paper>
-          </Grid>
-        </Grid>
-
-        <Paper
-          component={motion.div}
-          variants={itemVariants}
-          sx={{
-            width: '100%',
-            overflow: 'hidden',
-            borderRadius: 2,
-            boxShadow: 2,
-          }}
-        >
-          <Box
-            sx={{
-              p: 3,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Recent Users
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Diagram Status Distribution
             </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<Download size={18} />}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-              }}
-            >
-              Download Report
-            </Button>
-          </Box>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Plan</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Last Active</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {recentUsers.map((user) => (
-                  <TableRow key={user.id} hover>
-                    <TableCell sx={{ fontWeight: 500 }}>{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Box
-                        sx={{
-                          display: 'inline-flex',
-                          px: 1,
-                          py: 0.5,
-                          borderRadius: 1,
-                          bgcolor:
-                            user.plan === 'Pro'
-                              ? 'primary.lighter'
-                              : 'warning.lighter',
-                          color:
-                            user.plan === 'Pro'
-                              ? 'primary.main'
-                              : 'warning.main',
-                          typography: 'body2',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {user.plan}
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box
-                        sx={{
-                          display: 'inline-flex',
-                          px: 1,
-                          py: 0.5,
-                          borderRadius: 1,
-                          bgcolor:
-                            user.status === 'Active'
-                              ? 'success.lighter'
-                              : 'error.lighter',
-                          color:
-                            user.status === 'Active'
-                              ? 'success.main'
-                              : 'error.main',
-                          typography: 'body2',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {user.status}
-                      </Box>
-                    </TableCell>
-                    <TableCell>{user.lastActive}</TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        sx={{
-                          color: 'text.secondary',
-                          '&:hover': { bgcolor: 'action.hover' },
-                        }}
-                      >
-                        <MoreVertical size={18} />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      </Box>
-    </Container>
+            <Box sx={{ height: 400, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={diagramStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={100}
+                    outerRadius={140}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {diagramStatusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </Box>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Quick Stats
+            </Typography>
+            <Box sx={{ '& > *:not(:last-child)': { mb: 2 } }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  User Engagement Rate
+                </Typography>
+                <Typography variant="h6">
+                  {((stats?.users?.active || 0) / (stats?.users?.total || 1) * 100).toFixed(1)}%
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Average Credits per User
+                </Typography>
+                <Typography variant="h6">
+                  {((stats?.credits?.total || 0) / (stats?.users?.total || 1)).toFixed(1)}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Diagrams per User
+                </Typography>
+                <Typography variant="h6">
+                  {((stats?.diagrams?.total || 0) / (stats?.users?.total || 1)).toFixed(1)}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
+        </Grid>
+      </Grid>
+    </Box>
   );
 }

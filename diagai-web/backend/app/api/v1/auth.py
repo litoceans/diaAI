@@ -7,6 +7,10 @@ from app.models.user import UserCreate, User, GoogleSignInRequest
 from datetime import datetime
 from bson import ObjectId
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import os
+import dotenv
+dotenv.load_dotenv()
+getfreePlan = os.getenv("FREE_PLAN_CREDITS")
 
 router = APIRouter()
 security = HTTPBearer()
@@ -31,7 +35,8 @@ async def google_signin(
                 "email": decoded_token["email"],
                 "name": decoded_token.get("name", ""),
                 "photo_url": decoded_token.get("picture", ""),
-                "credits": 10,  # Default credits
+                "credits": int(getfreePlan),  # Default credits
+                "total_credits": int(getfreePlan),
                 "plan": "free",
                 "account_status": "active",
                 "created_at": datetime.utcnow(),

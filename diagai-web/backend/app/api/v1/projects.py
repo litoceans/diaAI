@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.api.deps import get_db, get_current_active_user
 from app.models.project import ProjectCreate, ProjectUpdate
 from datetime import datetime
 from bson import ObjectId
-from typing import List
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -59,6 +59,38 @@ async def get_project(
     
     project["diagrams"] = diagrams
     return project
+
+@router.get("/{project_id}/diagrams", response_model=List[dict])
+async def get_project_diagrams(
+    project_id: str,
+    status: Optional[str] = Query(None, enum=["completed", "failed"]),
+    type: Optional[str] = Query(None, enum=["image", "gif"]),
+    current_user: dict = Depends(get_current_active_user),
+    db: AsyncIOMotorDatabase = Depends(get_db)
+):
+    """Get project diagrams with optional status and type filters"""
+    # Verify project exists and belongs to user
+    project = await db.projects.find_one({
+        "_id": project_id,
+        "user_id": current_user["_id"]
+    })
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    # Build query
+    query = {"project_id": project_id}
+    if status:
+        query["status"] = status
+    if type:
+        query["type"] = type
+    
+    # Get diagrams with filters
+    diagrams = await db.diagrams.find(query).sort("created_at", -1).to_list(None)
+    return diagrams
 
 @router.patch("/{project_id}", response_model=dict)
 async def update_project(

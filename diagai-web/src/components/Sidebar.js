@@ -28,7 +28,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import {userApi} from '@/services/api';
+import { userApi } from '@/services/api';
 
 const menuItems = [
   { text: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -43,57 +43,43 @@ const drawerWidth = 240;
 // Animation variants
 const listItemVariants = {
   hidden: { opacity: 0, x: -20 },
-  visible: { opacity: 1, x: 0 }
+  visible: { opacity: 1, x: 0 },
 };
 
-const CreditsDisplay = ({ isCompact }) => {
-  const { credits, loading } = useCredits();
-  const [userCredits, setUserCredits] = useState(0);
-  const theme = useTheme();
-
-  const getCredits = async () => {
-    const credits = await userApi.getCredits();
-    setUserCredits(credits.credits);
-    return credits.credits;
-  }
-
-  useEffect(() => {
-    getCredits();
-  }, []);
-
-  if (loading) {
-    return (
-      <Box sx={{ 
-        p: isCompact ? 1 : 2,
-        width: '90%',
-        boxSizing: 'border-box',
-        padding: isCompact ? '8px 12px' : '16px 24px',
-        borderRadius: 1
-      }}>
-        <Skeleton variant="text" width="60%" height={24} />
-      </Box>
-    );
-  }
-
+const CreditsDisplay = ({ userCredits, isCompact, isLoading }) => {
   return (
-    <Box sx={{ 
-      p: isCompact ? 1 : 2,
-      borderRadius: 1,
-      boxSizing: 'border-box'
-    }}>
-      <Typography 
-        variant={isCompact ? "caption" : "body2"}
-        color="text.secondary"
-        sx={{ 
-          mb: isCompact ? 0.5 : 1,
-          fontSize: isCompact ? '0.7rem' : 'inherit',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
-        }}
-      >
-        Credits: {userCredits || 0}
-      </Typography>
+    <Box sx={{ p: isCompact ? 1 : 2, borderRadius: 1, boxSizing: 'border-box' }}>
+      {isLoading ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Skeleton
+            animation="wave"
+            variant="text"
+            width={isCompact ? 40 : 60}
+            height={isCompact ? 20 : 24}
+            sx={{ bgcolor: 'action.hover', transform: 'none' }}
+          />
+          <Skeleton
+            animation="wave"
+            variant="text"
+            width={isCompact ? 20 : 30}
+            height={isCompact ? 20 : 24}
+            sx={{ bgcolor: 'action.hover', transform: 'none' }}
+          />
+        </Box>
+      ) : (
+        <Typography
+          variant={isCompact ? 'caption' : 'body2'}
+          color="text.secondary"
+          sx={{
+            fontSize: isCompact ? '0.7rem' : 'inherit',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          Credits: {userCredits ?? 0}
+        </Typography>
+      )}
     </Box>
   );
 };
@@ -104,6 +90,27 @@ export default function Sidebar() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const [userCredits, setUserCredits] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const getCredits = async () => {
+    try {
+      setIsLoading(true);
+      const response = await userApi.getCredits();
+      setUserCredits(response.credits);
+    } catch (error) {
+      console.error('Error fetching credits:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    getCredits();
+    // Set up polling for credits update
+    const intervalId = setInterval(getCredits, 30000); // Update every 30 seconds
+    return () => clearInterval(intervalId);
+  }, []);
 
   const sidebarWidth = {
     xs: theme.spacing(10),
@@ -135,19 +142,14 @@ export default function Sidebar() {
         },
       }}
     >
-      <Box sx={{ 
-        p: isMobile ? 1 : 2,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: isMobile ? 'center' : 'flex-start'
-      }}>
-        <Typography 
-          variant={isMobile ? "subtitle1" : "h6"}
+      <Box sx={{ p: isMobile ? 1 : 2, display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'center' : 'flex-start' }}>
+        <Typography
+          variant={isMobile ? 'subtitle1' : 'h6'}
           component={motion.div}
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          sx={{ 
+          sx={{
             flexGrow: 1,
             background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
             WebkitBackgroundClip: 'text',
@@ -157,14 +159,14 @@ export default function Sidebar() {
             fontSize: {
               xs: '1.2rem',
               sm: '1.5rem',
-              md: '1.8rem'
-            }
+              md: '1.8rem',
+            },
           }}
         >
           {isMobile ? 'D' : 'DiaAI'}
         </Typography>
       </Box>
-      <CreditsDisplay isCompact={isMobile} />
+      <CreditsDisplay isCompact={isMobile} isLoading={isLoading} userCredits={userCredits} />
       <Divider sx={{ my: 1 }} />
       <List sx={{ px: isMobile ? 0.5 : 1 }}>
         {menuItems.map((item, index) => (
@@ -188,32 +190,26 @@ export default function Sidebar() {
                 '&:hover': {
                   backgroundColor: 'action.hover',
                   transform: 'translateX(5px)',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
                 },
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
               }}
             >
-              <ListItemIcon sx={{ 
-                minWidth: { xs: 36, sm: 40 },
-                color: pathname === item.path ? 'primary.main' : 'inherit'
-              }}>
-                <motion.div
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.3 }}
-                >
+              <ListItemIcon sx={{ minWidth: { xs: 36, sm: 40 }, color: pathname === item.path ? 'primary.main' : 'inherit' }}>
+                <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.3 }}>
                   <item.icon size={isMobile ? 16 : 20} />
                 </motion.div>
               </ListItemIcon>
               {!isMobile && (
-                <ListItemText 
-                  primary={item.text} 
+                <ListItemText
+                  primary={item.text}
                   sx={{
                     '& .MuiListItemText-primary': {
                       fontSize: {
                         sm: '0.9rem',
-                        md: '1rem'
-                      }
-                    }
+                        md: '1rem',
+                      },
+                    },
                   }}
                 />
               )}
@@ -221,12 +217,7 @@ export default function Sidebar() {
           </motion.div>
         ))}
       </List>
-      <Box sx={{ 
-        mt: 'auto', 
-        p: isMobile ? 1 : 2,
-        display: 'flex',
-        justifyContent: 'center'
-      }}>
+      <Box sx={{ mt: 'auto', p: isMobile ? 1 : 2, display: 'flex', justifyContent: 'center' }}>
         <Button
           component={motion.button}
           whileHover={{ scale: 1.02 }}
@@ -234,7 +225,10 @@ export default function Sidebar() {
           fullWidth={!isMobile}
           variant="outlined"
           color="error"
-          onClick={logout}
+          onClick={()=>{
+            localStorage.clear();
+            window.location.href = '/auth/login';
+          }}
           startIcon={!isMobile && <LogOut size={20} />}
           sx={{
             borderRadius: 2,
@@ -243,7 +237,7 @@ export default function Sidebar() {
             transition: 'all 0.3s ease',
             minWidth: isMobile ? '40px' : 'auto',
             p: isMobile ? '8px' : '8px 16px',
-            width: isMobile ? '40px' : '100%'
+            width: isMobile ? '40px' : '100%',
           }}
         >
           {isMobile ? <LogOut size={16} /> : 'Logout'}

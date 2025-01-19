@@ -34,8 +34,11 @@ import {
   Radio,
   FormControlLabel,
   Input,
+  ToggleButton,
+  ToggleButtonGroup,
+  LinearProgress,
+  useTheme,
 } from '@mui/material';
-import { motion } from 'framer-motion';
 import { 
   Plus, 
   Trash2, 
@@ -54,13 +57,20 @@ import {
   Maximize2,
   GitBranch,
   Workflow,
+  Filter,
+  MoreVertical,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
-import { useAuth } from '../../../../context/AuthContext';
-import { projectApi } from '../../../../services/projectApi';
-import { diagramApi } from '../../../../services/diagramApi';
-import ProtectedRoute from '../../../../components/ProtectedRoute';
+import { motion } from 'framer-motion';
+import { useAuth } from '@/context/AuthContext';
+import { projectApi } from '@/services/projectApi';
+import { diagramApi } from '@/services/diagramApi';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import EmptyState from '@/components/EmptyState';
 
 export default function ProjectDiagrams() {
+  const theme = useTheme();
   const { id: projectId } = useParams();
   const router = useRouter();
   const { user } = useAuth();
@@ -78,6 +88,8 @@ export default function ProjectDiagrams() {
   const [generationType, setGenerationType] = useState('image');
   const [uploadedImage, setUploadedImage] = useState(null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
   const diagramTypes = [
     {
@@ -158,7 +170,6 @@ export default function ProjectDiagrams() {
       ]
     }
   ];
-  
 
   const handleNext = () => {
     setActiveStep((prevStep) => prevStep + 1);
@@ -205,12 +216,16 @@ export default function ProjectDiagrams() {
     }
   };
 
-  const fetchProjectData = async () => {
+  const fetchProjectData = async (status = 'all', type = 'all') => {
     try {
       setLoading(true);
-      const projectData = await projectApi.getProject(projectId);
+      const [projectData, diagramsData] = await Promise.all([
+        projectApi.getProject(projectId),
+        projectApi.getDiagrams(projectId, status, type)
+      ]);
+      
       setProject(projectData);
-      setDiagrams(projectData.diagrams || []);
+      setDiagrams(diagramsData || []);
     } catch (err) {
       console.error('Error fetching project:', err);
       setError(err.message);
@@ -293,10 +308,16 @@ export default function ProjectDiagrams() {
                       border: generationType === 'image' ? '2px solid' : '1px solid',
                       borderColor: generationType === 'image' ? 'primary.main' : 'divider',
                       '&:hover': { borderColor: 'primary.main' },
+                      height: '100%', // Make card fill grid item height
                     }}
                     onClick={() => setGenerationType('image')}
                   >
-                    <CardContent>
+                    <CardContent sx={{ 
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      p: 2
+                    }}>
                       <FormControlLabel
                         value="image"
                         control={<Radio />}
@@ -322,10 +343,16 @@ export default function ProjectDiagrams() {
                       border: generationType === 'gif' ? '2px solid' : '1px solid',
                       borderColor: generationType === 'gif' ? 'primary.main' : 'divider',
                       '&:hover': { borderColor: 'primary.main' },
+                      height: '100%', // Make card fill grid item height
                     }}
                     onClick={() => setGenerationType('gif')}
                   >
-                    <CardContent>
+                    <CardContent sx={{ 
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      p: 2
+                    }}>
                       <FormControlLabel
                         value="gif"
                         control={<Radio />}
@@ -362,24 +389,27 @@ export default function ProjectDiagrams() {
                     sx={{ 
                       cursor: 'pointer',
                       height: '100%',
-                      transition: 'all 0.3s ease',
+                      position: 'relative',
+                      transition: 'all 0.2s ease-in-out',
                       transform: diagramType === type.type ? 'scale(1.02)' : 'scale(1)',
                       border: diagramType === type.type ? '2px solid' : '1px solid',
                       borderColor: diagramType === type.type ? 'primary.main' : 'divider',
                       boxShadow: diagramType === type.type ? 4 : 1,
                       '&:hover': {
-                        transform: 'scale(1.02)',
                         borderColor: 'primary.main',
-                        boxShadow: 4,
-                        '& .icon-wrapper': {
-                          color: 'primary.main',
-                          transform: 'scale(1.1)',
-                        }
+                        boxShadow: 3,
+                        ...(diagramType !== type.type && {
+                          transform: 'scale(1.01)',
+                          '& .icon-box': {
+                            color: 'common.white',
+                            transform: 'scale(1.05)',
+                          }
+                        })
                       }
                     }}
                     onClick={() => setDiagramType(type.type)}
                   >
-                    <CardContent>
+                    <CardContent sx={{ height: '100%' }}>
                       <Box 
                         className="icon-wrapper"
                         sx={{ 
@@ -387,19 +417,25 @@ export default function ProjectDiagrams() {
                           alignItems: 'center', 
                           gap: 1.5,
                           mb: 2,
-                          transition: 'all 0.3s ease',
+                          transition: 'all 0.2s ease-in-out',
                           color: diagramType === type.type ? 'primary.main' : 'text.secondary'
                         }}
                       >
                         <Box 
+                          className="icon-box"
                           sx={{ 
-                            backgroundColor: diagramType === type.type ? 'primary.light' : 'action.hover',
+                            backgroundColor: diagramType === type.type ? 'primary.main' : 'action.hover',
                             borderRadius: '50%',
                             p: 1,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            transition: 'all 0.3s ease'
+                            transition: 'all 0.2s ease-in-out',
+                            color: diagramType === type.type ? 'common.white' : 'inherit',
+                            '.MuiCard-root:hover &': {
+                              backgroundColor: 'primary.main',
+                              color: 'common.white'
+                            }
                           }}
                         >
                           {type.icon}
@@ -408,7 +444,8 @@ export default function ProjectDiagrams() {
                           variant="h6"
                           sx={{ 
                             color: diagramType === type.type ? 'primary.main' : 'text.primary',
-                            fontWeight: diagramType === type.type ? 600 : 500
+                            fontWeight: diagramType === type.type ? 600 : 500,
+                            transition: 'all 0.2s ease-in-out'
                           }}
                         >
                           {type.title}
@@ -417,7 +454,7 @@ export default function ProjectDiagrams() {
                       <Typography 
                         color={diagramType === type.type ? 'text.primary' : 'text.secondary'} 
                         mb={2}
-                        sx={{ transition: 'color 0.3s ease' }}
+                        sx={{ transition: 'color 0.2s ease-in-out' }}
                       >
                         {type.description}
                       </Typography>
@@ -427,7 +464,7 @@ export default function ProjectDiagrams() {
                         gutterBottom
                         sx={{ 
                           opacity: diagramType === type.type ? 1 : 0.7,
-                          transition: 'opacity 0.3s ease'
+                          transition: 'opacity 0.2s ease-in-out'
                         }}
                       >
                         Example prompts:
@@ -439,8 +476,11 @@ export default function ProjectDiagrams() {
                           m: 0,
                           '& li': {
                             color: diagramType === type.type ? 'text.primary' : 'text.secondary',
-                            transition: 'color 0.3s ease',
-                            mb: 0.5
+                            transition: 'color 0.2s ease-in-out',
+                            mb: 0.5,
+                            '&:last-child': {
+                              mb: 0
+                            }
                           }
                         }}
                       >
@@ -459,6 +499,7 @@ export default function ProjectDiagrams() {
                           component={motion.div}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
                           sx={{ 
                             mt: 2,
                             display: 'flex',
@@ -555,15 +596,206 @@ export default function ProjectDiagrams() {
     }
   };
 
+  const handleStatusFilterChange = async (event, newStatus) => {
+    if (newStatus !== null) {
+      setStatusFilter(newStatus);
+      await fetchProjectData(newStatus, typeFilter);
+    }
+  };
+
+  const handleTypeFilterChange = async (event, newType) => {
+    if (newType !== null) {
+      setTypeFilter(newType);
+      await fetchProjectData(statusFilter, newType);
+    }
+  };
+
   useEffect(() => {
     fetchProjectData();
   }, [projectId]);
+
+  const handleMenuClick = (event, diagram) => {
+    // setAnchorEl(event.currentTarget);
+    // setSelectedDiagram(diagram);
+  };
+
+  const handleMenuClose = () => {
+    // setAnchorEl(null);
+    // setSelectedDiagram(null);
+  };
 
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
       </Box>
+    );
+  }
+
+  if (diagrams.length === 0) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* Project Header */}
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            mb: 4,
+          }}
+        >
+          <Box>
+            <Typography variant="h4" gutterBottom>
+              {project.name}
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              {project.description}
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            startIcon={<Plus />}
+            onClick={() => setOpenDialog(true)}
+            sx={{
+              borderRadius: 2,
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              boxShadow: `0 8px 16px -4px ${theme.palette.primary.main}40`,
+              '&:hover': {
+                background: `linear-gradient(45deg, ${theme.palette.primary.dark}, ${theme.palette.secondary.dark})`,
+                boxShadow: `0 12px 20px -4px ${theme.palette.primary.main}60`,
+              }
+            }}
+          >
+            Create Diagram
+          </Button>
+        </Box>
+
+        {/* Empty State */}
+        <Paper sx={{ p: 4 }}>
+          <EmptyState
+            type="diagrams"
+            title="No Diagrams Yet"
+            description="Get started by creating your first diagram. Simply describe what you want,
+                       and our AI will generate beautiful visualizations for you in seconds."
+            buttonText="Create Your First Diagram"
+            onAction={() => setOpenDialog(true)}
+          />
+        </Paper>
+                  {/* Updated Dialog with new steps */}
+                  <Dialog
+            open={openDialog}
+            onClose={() => {
+              setOpenDialog(false);
+              handleReset();
+            }}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>
+              Create New Diagram
+              <Typography variant="body2" color="text.secondary">
+                Follow these steps to create your diagram
+              </Typography>
+            </DialogTitle>
+            <DialogContent>
+              <Stepper activeStep={activeStep} orientation="vertical">
+                <Step>
+                  <StepLabel>Choose Generation Type</StepLabel>
+                  <StepContent>{getStepContent(0)}</StepContent>
+                </Step>
+                <Step>
+                  <StepLabel>Select Diagram Type</StepLabel>
+                  <StepContent>{getStepContent(1)}</StepContent>
+                </Step>
+                <Step>
+                  <StepLabel>Enter Details</StepLabel>
+                  <StepContent>{getStepContent(2)}</StepContent>
+                </Step>
+              </Stepper>
+            </DialogContent>
+            <DialogActions sx={{ p: 3 }}>
+              <Button
+                onClick={handleBack}
+                disabled={activeStep === 0}
+              >
+                Back
+              </Button>
+              {activeStep === 2 ? (
+                <Button
+                  variant="contained"
+                  onClick={handleGenerateDiagram}
+                  disabled={!prompt.trim() || generating}
+                  startIcon={generating ? <CircularProgress size={20} /> : null}
+                >
+                  {generating ? 'Generating...' : 'Generate Diagram'}
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  onClick={handleNext}
+                  disabled={
+                    (activeStep === 0 && !generationType) ||
+                    (activeStep === 1 && !diagramType)
+                  }
+                >
+                  Continue
+                </Button>
+              )}
+            </DialogActions>
+          </Dialog>
+
+          {/* Preview Dialog */}
+          <Dialog
+            open={previewOpen}
+            onClose={() => setPreviewOpen(false)}
+            maxWidth="lg"
+            fullWidth
+          >
+            <DialogTitle>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6">Preview</Typography>
+                <IconButton onClick={() => setPreviewOpen(false)} size="small">
+                  <Trash2 size={18} />
+                </IconButton>
+              </Box>
+            </DialogTitle>
+            <DialogContent>
+              {selectedDiagram && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                  <Box
+                    component="img"
+                    src={selectedDiagram.url}
+                    alt={selectedDiagram.prompt}
+                    sx={{
+                      width: '100%',
+                      maxHeight: '70vh',
+                      objectFit: 'contain',
+                      bgcolor: 'background.paper',
+                    }}
+                  />
+                  <Typography variant="body1">{selectedDiagram.prompt}</Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Chip label={`Type: ${selectedDiagram.type}`} variant="outlined" />
+                    <Chip label={`Status: ${selectedDiagram.status}`} color="success" />
+                    <Chip 
+                      label={new Date(selectedDiagram.created_at).toLocaleDateString()} 
+                      variant="outlined"
+                    />
+                  </Box>
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={() => handleDownload(selectedDiagram?.url)}
+                startIcon={<Download />}
+                variant="contained"
+              >
+                Download
+              </Button>
+            </DialogActions>
+          </Dialog>
+      </Container>
     );
   }
 
@@ -613,6 +845,66 @@ export default function ProjectDiagrams() {
               {error}
             </Alert>
           )}
+
+          {/* Filters */}
+          <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Filter size={20} />
+            <ToggleButtonGroup
+              value={statusFilter}
+              exclusive
+              onChange={handleStatusFilterChange}
+              size="small"
+            >
+              <ToggleButton value="all">
+                All
+              </ToggleButton>
+              <ToggleButton 
+                value="completed"
+                sx={{ 
+                  '&.Mui-selected': { 
+                    color: 'success.main',
+                    borderColor: 'success.main',
+                    '&:hover': { borderColor: 'success.main' }
+                  }
+                }}
+              >
+                <CheckCircle size={16} style={{ marginRight: 4 }} />
+                Success
+              </ToggleButton>
+              <ToggleButton 
+                value="failed"
+                sx={{ 
+                  '&.Mui-selected': { 
+                    color: 'error.main',
+                    borderColor: 'error.main',
+                    '&:hover': { borderColor: 'error.main' }
+                  }
+                }}
+              >
+                <XCircle size={16} style={{ marginRight: 4 }} />
+                Failed
+              </ToggleButton>
+            </ToggleButtonGroup>
+
+            <ToggleButtonGroup
+              value={typeFilter}
+              exclusive
+              onChange={handleTypeFilterChange}
+              size="small"
+            >
+              <ToggleButton value="all">
+                All Types
+              </ToggleButton>
+              <ToggleButton value="image">
+                <ImageIcon size={16} style={{ marginRight: 4 }} />
+                Image
+              </ToggleButton>
+              <ToggleButton value="gif">
+                <Film size={16} style={{ marginRight: 4 }} />
+                GIF
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
 
           {/* Diagrams Grid */}
           <Grid container spacing={3}>

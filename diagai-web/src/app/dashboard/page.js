@@ -1,6 +1,6 @@
 'use client';
 
-import { useState ,useEffect} from 'react';
+import { useState, useEffect } from 'react';
 import PageLayout from '@/components/PageLayout';
 import { 
   Grid, 
@@ -13,7 +13,9 @@ import {
   Chip,
   LinearProgress,
   Divider,
-  Button
+  Button,
+  Tab,
+  Tabs
 } from '@mui/material';
 import { motion } from 'framer-motion';
 import { 
@@ -22,12 +24,20 @@ import {
   Clock, 
   Zap,
   Crown,
-  ArrowUpRight
+  ArrowUpRight,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useCredits } from '@/context/CreditsContext';
 import { userApi } from '@/services/api';
-
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer
+} from 'recharts';
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -41,22 +51,58 @@ const cardVariants = {
 };
 
 const statsCards = [
-  { title: 'Total Diagrams', value: '24', icon: Image, color: '#2196F3' },
-  { title: 'Active Projects', value: '3', icon: Activity, color: '#4CAF50' },
-  { title: 'Credits Used', value: '120', icon: Zap, color: '#FF9800' },
-  { title: 'Time Saved', value: '8h', icon: Clock, color: '#9C27B0' }
+  { 
+    title: 'Total Diagrams', 
+    key: 'totalDiagrams',
+    icon: Image, 
+    color: '#2196F3',
+    format: (value) => value.toString()
+  },
+  { 
+    title: 'Active Projects', 
+    key: 'activeProjects',
+    icon: Activity, 
+    color: '#4CAF50',
+    format: (value) => value.toString()
+  },
+  { 
+    title: 'Credits Used', 
+    key: 'creditsUsed',
+    icon: Zap, 
+    color: '#FF9800',
+    format: (value) => value.toString()
+  },
+  { 
+    title: 'Time Saved', 
+    key: 'timeSaved',
+    icon: Clock, 
+    color: '#9C27B0',
+    format: (value) => `${value}h`
+  }
 ];
 
 export default function Dashboard() {
   const theme = useTheme();
   const { user } = useAuth();
-  const { credits, maxCredits } = useCredits();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const [stats, setStats] = useState({});
+  const [stats, setStats] = useState({
+    totalDiagrams: 0,
+    activeProjects: 0,
+    creditsUsed: 0,
+    timeSaved: 0,
+    totalCredits:0,
+    avlCredits:0
+  });
   const [diagrams, setDiagrams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [usageStats, setUsageStats] = useState({ daily: [], monthly: [] });
+  const [chartTab, setChartTab] = useState(0);
+
+  const handleChartTabChange = (event, newValue) => {
+    setChartTab(newValue);
+  };
 
   const logout = () => {
     localStorage.clear();
@@ -66,15 +112,26 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [statsData, diagramsData] = await Promise.all([
+        const [statsData, diagramsData, usageData] = await Promise.all([
           userApi.getDashboardStats(),
-          userApi.getUserDiagrams(5), // Get 5 most recent diagrams
+          userApi.getUserDiagrams(5),
+          userApi.getCreditsUsage()
         ]);
         
         if (statsData.stats) {
-          setStats(statsData.stats);
+          const timeSaved = Math.round((statsData.stats.totalDiagrams * 30) / 60);
+          
+          setStats({
+            totalDiagrams: statsData.stats.totalDiagrams || 0,
+            activeProjects: statsData.stats.totalProjects || 0,
+            creditsUsed: statsData.stats.creditsUsed || 0,
+            timeSaved: timeSaved,
+            totalCredits: statsData.stats.fullCredits || 0,
+            avlCredits: statsData.stats.avlCredits || 0
+          });
         }
         setDiagrams(diagramsData || []);
+        setUsageStats(usageData || { daily: [], monthly: [] });
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         setError(error.message);
@@ -87,9 +144,31 @@ export default function Dashboard() {
     };
 
     fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  const creditUsagePercentage = (credits / maxCredits) * 100;
+  if (loading) {
+    return (
+      <PageLayout>
+        <Box sx={{ width: '100%', mt: 2 }}>
+          <LinearProgress />
+        </Box>
+      </PageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <PageLayout>
+        <Box sx={{ mt: 2, p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
+          <Typography color="error">Error: {error}</Typography>
+        </Box>
+      </PageLayout>
+    );
+  }
+
+  const creditUsagePercentage = (stats.creditsUsed / stats.totalCredits) * 100;
 
   return (
     <PageLayout>
@@ -100,229 +179,272 @@ export default function Dashboard() {
             component={motion.h1}
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            sx={{ 
-              fontSize: {
-                xs: '1.5rem',
-                sm: '2rem',
-                md: '2.5rem'
-              }
-            }}
+            transition={{ duration: 0.5 }}
           >
-            Welcome back, {user?.displayName || 'User'}!
+            Welcome back, {user?.name || 'User'}!
           </Typography>
-          <Chip 
-            icon={<Crown size={16} />}
-            label="Pro Plan"
-            color="primary"
-            sx={{ 
-              height: 'auto',
-              py: 0.5,
-              backgroundColor: theme.palette.primary.main + '20',
-              color: theme.palette.primary.main,
-              borderRadius: 2
-            }}
-          />
+          {user?.plan === 'pro' && (
+            <Chip 
+              icon={<Crown size={16} />} 
+              label="PRO" 
+              color="primary" 
+              size="small"
+            />
+          )}
         </Box>
-        <Typography 
-          color="text.secondary"
-          sx={{ 
-            fontSize: {
-              xs: '0.875rem',
-              sm: '1rem'
-            }
-          }}
-        >
-          Here's what's happening with your projects
-        </Typography>
-      </Box>
 
-      <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 4 }}>
-        {statsCards.map((card, index) => (
-          <Grid item xs={12} sm={6} md={3} key={card.title}>
-            <Card
-              component={motion.div}
-              variants={cardVariants}
-              initial="hidden"
-              animate="visible"
-              transition={{ delay: index * 0.1 }}
-              sx={{ 
-                height: '100%',
-                borderRadius: 2,
-                boxShadow: theme.shadows[2],
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  transition: 'transform 0.3s ease',
-                  boxShadow: theme.shadows[4]
-                }
-              }}
-            >
-              <CardContent sx={{ 
-                p: { xs: 2, sm: 3 },
-                '&:last-child': { pb: { xs: 2, sm: 3 } }
-              }}>
-                <Box sx={{ 
-                  display: 'flex',
-                  alignItems: 'center',
-                  mb: { xs: 1, sm: 2 }
-                }}>
-                  <Box
-                    sx={{
-                      p: 1,
-                      borderRadius: 1,
-                      backgroundColor: `${card.color}20`,
-                      color: card.color,
-                      mr: 1
-                    }}
-                  >
-                    <card.icon size={isMobile ? 16 : 20} />
-                  </Box>
-                  <Typography 
-                    variant="subtitle2" 
-                    color="text.secondary"
-                    sx={{ 
-                      fontSize: {
-                        xs: '0.75rem',
-                        sm: '0.875rem'
-                      }
-                    }}
-                  >
-                    {card.title}
-                  </Typography>
-                </Box>
-                <Typography 
-                  variant="h4" 
+        <Grid container spacing={3}>
+          {statsCards.map((card, index) => (
+            <Grid item xs={12} sm={6} md={3} key={card.title}>
+              <motion.div
+                variants={cardVariants}
+                initial="hidden"
+                animate="visible"
+                transition={{ delay: index * 0.1 }}
+              >
+                <Card 
+                  elevation={0}
                   sx={{ 
-                    fontWeight: 'bold',
-                    fontSize: {
-                      xs: '1.5rem',
-                      sm: '2rem',
-                      md: '2.5rem'
+                    bgcolor: 'background.paper',
+                    border: 1,
+                    borderColor: 'divider',
+                    height: '100%',
+                    '&:hover': {
+                      borderColor: card.color,
+                      transform: 'translateY(-2px)',
+                      transition: 'all 0.3s ease-in-out'
                     }
                   }}
                 >
-                  {card.value}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      <Grid container spacing={3}>
-        {/* Plan Details */}
-        <Grid item xs={12} md={8}>
-          <Card
-            component={motion.div}
-            variants={cardVariants}
-            initial="hidden"
-            animate="visible"
-            sx={{ 
-              borderRadius: 2,
-              height: '100%'
-            }}
-          >
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-                <Typography variant="h6">Plan Details</Typography>
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  size="small"
-                  endIcon={<ArrowUpRight size={16} />}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Upgrade Plan
-                </Button>
-              </Box>
-              
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Credits Usage
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <card.icon 
+                        size={20} 
+                        style={{ 
+                          color: card.color,
+                          marginRight: '8px'
+                        }} 
+                      />
+                      <Typography 
+                        variant="subtitle2" 
+                        color="text.secondary"
+                      >
+                        {card.title}
+                      </Typography>
+                    </Box>
+                    <Typography variant="h4">
+                      {card.format(stats[card.key])}
                     </Typography>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={creditUsagePercentage}
-                      sx={{ 
-                        height: 8,
-                        borderRadius: 4,
-                        mb: 1,
-                        backgroundColor: theme.palette.primary.main + '20'
-                      }} 
-                    />
-                    <Typography variant="caption" color="text.secondary">
-                      {credits} of {maxCredits} credits used
-                    </Typography>
-                  </Box>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Plan Features
-                  </Typography>
-                  <Grid container spacing={1}>
-                    {['Unlimited Projects', 'Priority Support', 'Advanced Analytics', 'Custom Export'].map((feature) => (
-                      <Grid item xs={12} sm={6} key={feature}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Crown size={16} color={theme.palette.primary.main} />
-                          <Typography variant="body2">{feature}</Typography>
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </Grid>
+          ))}
         </Grid>
 
-        {/* Recent Activity */}
-        <Grid item xs={12} md={4}>
-          <Card
-            component={motion.div}
-            variants={cardVariants}
-            initial="hidden"
-            animate="visible"
+        {/* Credits Usage Section */}
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="h6" gutterBottom>
+            Credits Usage
+          </Typography>
+          <Card 
+            elevation={0}
             sx={{ 
-              borderRadius: 2,
-              height: '100%'
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider'
             }}
           >
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>Recent Activity</Typography>
-              {['Created new diagram', 'Updated project settings', 'Added team member'].map((activity, index) => (
-                <Box 
-                  key={activity}
+            <CardContent>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {stats.creditsUsed} of {stats.totalCredits} credits remaining
+                </Typography>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={creditUsagePercentage}
                   sx={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    mb: 2,
-                    '&:last-child': { mb: 0 }
+                    height: 8,
+                    borderRadius: 4,
+                    bgcolor: 'background.paper',
+                    '& .MuiLinearProgress-bar': {
+                      bgcolor: creditUsagePercentage > 80 ? 'error.main' : 'primary.main'
+                    }
+                  }}
+                />
+              </Box>
+              {creditUsagePercentage > 80 && (
+                <Typography variant="body2" color="error">
+                  Your credits are running low. Consider upgrading your plan.
+                </Typography>
+              )}
+            </CardContent>
+          </Card>
+        </Box>
+
+        {/* Credits Usage Charts */}
+        <Box sx={{ mt: 4 }}>
+          <Card 
+            elevation={0}
+            sx={{ 
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider'
+            }}
+          >
+            <CardContent>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+                <Tabs 
+                  value={chartTab} 
+                  onChange={handleChartTabChange}
+                  sx={{
+                    '& .MuiTab-root': {
+                      minWidth: 120
+                    }
                   }}
                 >
-                  <Box
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      backgroundColor: theme.palette.primary.main
-                    }}
+                  <Tab 
+                    icon={<TrendingUp size={16} />} 
+                    iconPosition="start" 
+                    label="Daily Usage" 
                   />
-                  <Box>
-                    <Typography variant="body2">{activity}</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {index === 0 ? '2 hours ago' : index === 1 ? 'Yesterday' : '3 days ago'}
-                    </Typography>
-                  </Box>
-                </Box>
-              ))}
+                  <Tab 
+                    icon={<Activity size={16} />} 
+                    iconPosition="start" 
+                    label="Monthly Usage" 
+                  />
+                </Tabs>
+              </Box>
+              
+              <Box sx={{ height: 300, width: '100%' }}>
+                {chartTab === 0 ? (
+                  <ResponsiveContainer>
+                    <AreaChart
+                      data={usageStats.daily}
+                      margin={{
+                        top: 10,
+                        right: 30,
+                        left: 0,
+                        bottom: 0,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="date" 
+                        tickFormatter={(date) => {
+                          const d = new Date(date);
+                          return d.toLocaleDateString('en-US', { weekday: 'short' });
+                        }}
+                      />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value) => [`${value} credits`, 'Usage']}
+                        labelFormatter={(date) => {
+                          const d = new Date(date);
+                          return d.toLocaleDateString('en-US', { 
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          });
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke={theme.palette.primary.main}
+                        fill={theme.palette.primary.main + '20'}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <ResponsiveContainer>
+                    <AreaChart
+                      data={usageStats.monthly}
+                      margin={{
+                        top: 10,
+                        right: 30,
+                        left: 0,
+                        bottom: 0,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="month" 
+                        tickFormatter={(month) => {
+                          const date = new Date(month);
+                          return date.toLocaleDateString('en-US', { month: 'short' });
+                        }}
+                      />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value) => [`${value} credits`, 'Usage']}
+                        labelFormatter={(month) => {
+                          const date = new Date(month);
+                          return date.toLocaleDateString('en-US', { 
+                            year: 'numeric',
+                            month: 'long'
+                          });
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke={theme.palette.primary.main}
+                        fill={theme.palette.primary.main + '20'}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </Box>
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+        </Box>
+
+        {/* Recent Diagrams Section */}
+        {diagrams.length > 0 && (
+          <Box sx={{ mt: 4 }}>
+            <Typography variant="h6" gutterBottom>
+              Recent Diagrams
+            </Typography>
+            <Grid container spacing={2}>
+              {diagrams.map((diagram, index) => (
+                <Grid item xs={12} sm={6} md={4} key={diagram._id}>
+                  <motion.div
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Card 
+                      elevation={0}
+                      sx={{ 
+                        bgcolor: 'background.paper',
+                        border: 1,
+                        borderColor: 'divider',
+                        '&:hover': {
+                          borderColor: 'primary.main',
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.3s ease-in-out'
+                        }
+                      }}
+                    >
+                      <CardContent>
+                        <Typography variant="subtitle1" noWrap>
+                          {diagram.title}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          Created: {new Date(diagram.created_at).toLocaleDateString()}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </Grid>
+              ))}
+            </Grid>
+          </Box>
+        )}
+      </Box>
     </PageLayout>
   );
 }

@@ -65,13 +65,13 @@ async def get_current_active_user(
             detail=f"Error retrieving user: {str(e)}"
         )
 
-async def get_admin_user(
+async def get_current_admin_user(
     current_user: dict = Depends(get_current_active_user)
-) -> str:
-    """Check if user is admin."""
-    if not current_user.get("is_admin"):
+) -> dict:
+    """Get current admin user."""
+    if not current_user.get("is_admin", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            detail="User does not have admin privileges"
         )
-    return current_user["_id"]
+    return current_user

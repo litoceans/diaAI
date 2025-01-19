@@ -9,6 +9,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth';
+import { adminApi } from '@/services/adminApi';
 
 const AuthContext = createContext({});
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -16,7 +17,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 // Helper function to store auth data
 const storeAuthData = (token, user) => {
   localStorage.setItem('token', token);
-  localStorage.setItem('userId', user._id);
+  localStorage.setItem('userId', user.id || user._id);
   localStorage.setItem('userEmail', user.email);
   localStorage.setItem('userData', JSON.stringify(user));
 };
@@ -83,6 +84,18 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const adminLogin = async (email, password) => {
+    try {
+      const data = await adminApi.login(email, password);
+      storeAuthData(data.access_token, data.user);
+      setUser(data.user);
+      return data.user;
+    } catch (error) {
+      console.error('Admin login failed:', error);
+      throw error;
+    }
+  };
+
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
@@ -96,7 +109,10 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      // Only sign out from Firebase if not an admin user
+      if (!user?.is_admin) {
+        await signOut(auth);
+      }
       clearAuthData();
       setUser(null);
     } catch (error) {
@@ -107,6 +123,11 @@ export function AuthProvider({ children }) {
 
   const refreshToken = async () => {
     try {
+      // Skip token refresh for admin users
+      if (user?.is_admin) {
+        return;
+      }
+
       const currentUser = auth.currentUser;
       if (currentUser) {
         const idToken = await currentUser.getIdToken(true);
@@ -134,18 +155,16 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    login,
-    signInWithGoogle,
-    logout,
     loading,
-    refreshToken,
+    isAuthenticated: !!user,
+    login,
+    adminLogin,
+    logout,
+    signInWithGoogle,
+    refreshToken
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {

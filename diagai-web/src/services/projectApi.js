@@ -26,7 +26,26 @@ export const projectApi = {
   getProjects: () => fetchWithAuth('/projects'),
 
   // Get single project with diagrams
-  getProject: (projectId) => fetchWithAuth(`/projects/${projectId}`),
+  getProject: (id) => fetchWithAuth(`/projects/${id}`),
+
+  // Get diagrams with status and type filters
+  getDiagrams: (projectId, status = 'all', type = 'all') => {
+    let url = `/projects/${projectId}/diagrams`;
+    const params = [];
+    
+    if (status !== 'all') {
+      params.push(`status=${status}`);
+    }
+    if (type !== 'all') {
+      params.push(`type=${type}`);
+    }
+    
+    if (params.length > 0) {
+      url += '?' + params.join('&');
+    }
+    
+    return fetchWithAuth(url);
+  },
 
   // Create new project
   createProject: (data) => fetchWithAuth('/projects', {
@@ -35,13 +54,13 @@ export const projectApi = {
   }),
 
   // Update project
-  updateProject: (projectId, data) => fetchWithAuth(`/projects/${projectId}`, {
+  updateProject: (id, data) => fetchWithAuth(`/projects/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   }),
 
   // Delete project
-  deleteProject: (projectId) => fetchWithAuth(`/projects/${projectId}`, {
+  deleteProject: (id) => fetchWithAuth(`/projects/${id}`, {
     method: 'DELETE',
   }),
 };
