@@ -168,6 +168,17 @@ export default function ProjectDiagrams() {
         'Object relationships',
         'System design'
       ]
+    },
+    {
+      type:'git (Git Verison Flow)',
+      title: 'Git Diagrams',
+      icon: <GitMerge size={24} />,
+      description: 'Show How Git Works',
+      examples: [
+        'Git workflow',
+        'Merge conflicts',
+        'Commit history'
+      ]
     }
   ];
 

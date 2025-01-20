@@ -45,6 +45,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { projectApi } from '@/services/projectApi';
+import Loading from './loading'
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -208,6 +209,7 @@ export default function Projects() {
   
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTransition, setLoadingTransition] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -221,6 +223,16 @@ export default function Projects() {
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  useEffect(() => {
+    if (!loading && loadingTransition) {
+      // Add a small delay before removing loading state completely
+      const timer = setTimeout(() => {
+        setLoadingTransition(false);
+      }, 300); // Match this with animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   const fetchProjects = async () => {
     try {
@@ -303,21 +315,19 @@ export default function Projects() {
     }
   };
 
-  if (projects.length === 0) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Paper sx={{ p: 4 }}>
-          <EmptyState
-            onCreateProject={() => setModalOpen(true)}
-          />
-        </Paper>
-      </Container>
-    );
+  if (loading || loadingTransition) {
+    return <Loading />;
   }
 
   return (
     <PageLayout>
-      <Box sx={{ mb: { xs: 3, sm: 4, md: 5 } }}>
+      <Box
+        component={motion.div}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        sx={{ mb: { xs: 3, sm: 4, md: 5 } }}
+      >
         <Box sx={{ 
           display: 'flex', 
           flexDirection: { xs: 'column', sm: 'row' }, 
@@ -366,23 +376,18 @@ export default function Projects() {
                 ),
               }}
             />
-            {
-              projects?.length > 0 && (
-                <Button
-                variant="contained"
-                startIcon={<Plus size={20} />}
-                onClick={() => setModalOpen(true)}
-                sx={{ 
-                  borderRadius: 2,
-                  whiteSpace: 'nowrap',
-                  width: { xs: '100%', sm: 'auto' }
-                }}
-              >
-                New Project
-              </Button>
-              )
-            }
-
+            <Button
+              variant="contained"
+              startIcon={<Plus size={20} />}
+              onClick={() => setModalOpen(true)}
+              sx={{ 
+                borderRadius: 2,
+                whiteSpace: 'nowrap',
+                width: { xs: '100%', sm: 'auto' }
+              }}
+            >
+              New Project
+            </Button>
           </Box>
         </Box>
 
@@ -393,8 +398,7 @@ export default function Projects() {
           overflowX: 'auto',
           pb: 1
         }}>
-          {/* {['all', 'starred', 'shared'].map((type) => ( */}
-              {['all'].map((type) => (
+          {['all'].map((type) => (
             <Chip
               key={type}
               label={type.charAt(0).toUpperCase() + type.slice(1)}
@@ -415,100 +419,102 @@ export default function Projects() {
           ))}
         </Box>
 
-        <AnimatePresence>
-          <Grid container spacing={2}>
-            {loading ? (
-              Array.from(new Array(6)).map((_, index) => (
-                <Grid item xs={12} sm={6} md={4} key={index}>
-                  <Card sx={{ borderRadius: 2 }}>
-                    <CardContent>
-                      <Skeleton variant="text" width="60%" height={32} />
-                      <Skeleton variant="text" width="40%" height={24} />
-                      <Skeleton variant="rectangular" height={60} sx={{ mt: 2, borderRadius: 1 }} />
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))
-            ) : filteredProjects.length === 0 ? (
-              <Grid item xs={12}>
-                <Paper sx={{ p: 4 }}>
-                  <EmptyState onCreateProject={() => setModalOpen(true)} />
-                </Paper>
-              </Grid>
-            ) : filteredProjects.map((project) => (
-              <Grid item xs={12} sm={6} md={4} key={project._id}>
-                <Card
-                  component={motion.div}
-                  variants={cardVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  layout
-                  sx={{ 
-                    borderRadius: 2,
-                    cursor: 'pointer',
-                    '&:hover': {
-                      boxShadow: theme.shadows[4],
-                      transform: 'translateY(-4px)',
-                      transition: 'all 0.3s ease'
-                    }
-                  }}
-                  onClick={() => router.push(`/projects/${project._id}/diagrams`)}
-                >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                      <Box>
-                        <Typography variant="h6" gutterBottom>
-                          {project.name}
-                        </Typography>
-                        <Chip 
-                          label={project.status || 'Active'} 
-                          size="small"
-                          sx={{ 
-                            backgroundColor: getStatusColor(project.status) + '20',
-                            color: getStatusColor(project.status),
-                            borderRadius: 1
-                          }} 
-                        />
-                      </Box>
-                      <IconButton 
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMenuOpen(e, project);
-                        }}
-                      >
-                        <MoreVertical size={20} />
-                      </IconButton>
-                    </Box>
-
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <FolderOpen size={16} color={theme.palette.text.secondary} />
-                        <Typography variant="body2" color="text.secondary">
-                          {project.diagrams?.length || 0} diagrams
-                        </Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Calendar size={16} color={theme.palette.text.secondary} />
-                        <Typography variant="body2" color="text.secondary">
-                          {format(new Date(project.created_at), 'MMM d, yyyy')}
-                        </Typography>
-                      </Box>
-                      {project.shared && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Users size={16} color={theme.palette.text.secondary} />
-                          <Typography variant="body2" color="text.secondary">
-                            Shared with team
-                          </Typography>
+        <AnimatePresence mode="wait">
+          {filteredProjects.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+            >
+              <Paper sx={{ p: 4 }}>
+                <EmptyState onCreateProject={() => setModalOpen(true)} />
+              </Paper>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Grid container spacing={2}>
+                {filteredProjects.map((project) => (
+                  <Grid item xs={12} sm={6} md={4} key={project._id}>
+                    <Card
+                      component={motion.div}
+                      variants={cardVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      layout
+                      sx={{ 
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                        '&:hover': {
+                          boxShadow: theme.shadows[4],
+                          transform: 'translateY(-4px)',
+                          transition: 'all 0.3s ease'
+                        }
+                      }}
+                      onClick={() => router.push(`/projects/${project._id}/diagrams`)}
+                    >
+                      <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Box>
+                            <Typography variant="h6" gutterBottom>
+                              {project.name}
+                            </Typography>
+                            <Chip 
+                              label={project.status || 'Active'} 
+                              size="small"
+                              sx={{ 
+                                backgroundColor: getStatusColor(project.status) + '20',
+                                color: getStatusColor(project.status),
+                                borderRadius: 1
+                              }} 
+                            />
+                          </Box>
+                          <IconButton 
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMenuOpen(e, project);
+                            }}
+                          >
+                            <MoreVertical size={20} />
+                          </IconButton>
                         </Box>
-                      )}
-                    </Box>
-                  </CardContent>
-                </Card>
+
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <FolderOpen size={16} color={theme.palette.text.secondary} />
+                            <Typography variant="body2" color="text.secondary">
+                              {project.diagrams?.length || 0} diagrams
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Calendar size={16} color={theme.palette.text.secondary} />
+                            <Typography variant="body2" color="text.secondary">
+                              {format(new Date(project.created_at), 'MMM d, yyyy')}
+                            </Typography>
+                          </Box>
+                          {project.shared && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Users size={16} color={theme.palette.text.secondary} />
+                              <Typography variant="body2" color="text.secondary">
+                                Shared with team
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
               </Grid>
-            ))}
-          </Grid>
+            </motion.div>
+          )}
         </AnimatePresence>
       </Box>
 
